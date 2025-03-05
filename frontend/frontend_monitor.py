@@ -6,8 +6,8 @@ sys.path.append(parent_dir)
 import streamlit as st
 
 # Retrieve the Hopsworks API key and project name from secrets
-# HOPSWORKS_API_KEY = st.secrets["HOPSWORKS_API_KEY"]
-# HOPSWORKS_PROJECT_NAME = st.secrets["HOPSWORKS_PROJECT_NAME"]
+HOPSWORKS_API_KEY = st.secrets["HOPSWORKS_API_KEY"]
+HOPSWORKS_PROJECT_NAME = st.secrets["HOPSWORKS_PROJECT_NAME"]
 
 import pandas as pd
 import plotly.express as px
