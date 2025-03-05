@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import FunctionTransformer
+import numpy as np
 
 
 # Function to calculate the average rides over the last 4 weeks
@@ -51,22 +52,48 @@ add_temporal_features = TemporalFeatureEngineer()
 
 # Function to return the pipeline
 def get_pipeline(**hyper_params):
-    """
-    Returns a pipeline with optional parameters for LGBMRegressor.
-
-    Parameters:
-    ----------
-    **hyper_params : dict
-        Optional parameters to pass to the LGBMRegressor.
-
-    Returns:
-    -------
-    pipeline : sklearn.pipeline.Pipeline
-        A pipeline with feature engineering and LGBMRegressor.
-    """
     pipeline = make_pipeline(
         add_feature_average_rides_last_4_weeks,
         add_temporal_features,
-        lgb.LGBMRegressor(**hyper_params),  # Pass optional parameters here
+        FFTFeatureEngineer(window_size=24, top_k=5, drop_original=False),
+        lgb.LGBMRegressor(**hyper_params)
     )
     return pipeline
+
+
+
+from sklearn.base import BaseEstimator, TransformerMixin
+
+# ---- Our new FFT transformer ----
+class FFTFeatureEngineer(BaseEstimator, TransformerMixin):
+    def __init__(self, window_size=24, top_k=5, drop_original=False):
+        self.window_size = window_size
+        self.top_k = top_k
+        self.drop_original = drop_original
+    
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self, X, y=None):
+        X_ = X.copy()
+        required_cols = [f"rides_t-{i}" for i in range(1, self.window_size + 1)]
+        missing = [c for c in required_cols if c not in X_.columns]
+        if missing:
+            raise ValueError(f"Missing columns for FFT: {missing}")
+        
+        def compute_fft_features(row):
+            signal = row[required_cols].values
+            fft_vals = np.fft.rfft(signal)
+            fft_mags = np.abs(fft_vals)
+            top_indices = np.argsort(fft_mags)[-self.top_k:]
+            return fft_mags[top_indices]
+        
+        fft_features = X_[required_cols].apply(
+            compute_fft_features, axis=1, result_type="expand"
+        )
+        fft_features.columns = [f"fft_feature_{i}" for i in range(self.top_k)]
+        
+        X_ = pd.concat([X_, fft_features], axis=1)
+        if self.drop_original:
+            X_.drop(columns=required_cols, inplace=True)
+        return X_
